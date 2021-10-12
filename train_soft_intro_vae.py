@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 import torchvision.utils as vutils
 import torch.nn.functional as F
 from torchvision.utils import make_grid
-from torchvision.datasets import CIFAR10, MNIST, FashionMNIST, SVHN
 from torchvision import transforms
 
 # standard
@@ -23,8 +22,8 @@ import time
 import numpy as np
 from tqdm import tqdm
 import pickle
-from dataset import ImageDatasetFromFile, DigitalMonstersDataset
-from metrics.fid_score import calculate_fid_given_dataset
+from dataset import ImageDatasetFromFile
+# from metrics.fid_score import calculate_fid_given_dataset
 import matplotlib.pyplot as plt
 import matplotlib
 
@@ -317,7 +316,7 @@ def load_model(model, pretrained, device):
 
 
 def save_checkpoint(model, epoch, iteration, prefix=""):
-    model_out_path = "./saves/" + prefix + "model_epoch_{}_iter_{}.pth".format(epoch, iteration)
+    model_out_path = "./saves/" + prefix + "model.pth".format(epoch, iteration)
     state = {"epoch": epoch, "model": model.state_dict()}
     if not os.path.exists("./saves/"):
         os.makedirs("./saves/")
@@ -336,7 +335,7 @@ def train_soft_intro_vae(dataset='cifar10', z_dim=128, lr_e=2e-4, lr_d=2e-4, bat
                          start_epoch=0, exit_on_negative_diff=False,
                          num_epochs=250, num_vae=0, save_interval=50, recon_loss_type="mse",
                          beta_kl=1.0, beta_rec=1.0, beta_neg=1.0, test_iter=1000, seed=-1, pretrained=None,
-                         device=torch.device("cpu"), num_row=8, gamma_r=1e-8, with_fid=False):
+                         device=torch.device("cpu"), num_row=8, gamma_r=1e-8):
     """
     :param dataset: dataset to train on: ['cifar10', 'mnist', 'fmnist', 'svhn', 'monsters128', 'celeb128', 'celeb256', 'celeb1024']
     :param z_dim: latent dimensions
@@ -371,71 +370,19 @@ def train_soft_intro_vae(dataset='cifar10', z_dim=128, lr_e=2e-4, lr_d=2e-4, bat
         print("random seed: ", seed)
 
     # --------------build models -------------------------
-    if dataset == 'cifar10':
-        image_size = 32
-        channels = [64, 128, 256]
-        train_set = CIFAR10(root='./cifar10_ds', train=True, download=True, transform=transforms.ToTensor())
-        ch = 3
-    elif dataset == 'celeb128':
-        channels = [64, 128, 256, 512, 512]
-        image_size = 128
-        ch = 3
-        output_height = 128
-        train_size = 162770
-        data_root = '../data/celeb256/img_align_celeba'
-        image_list = [x for x in os.listdir(data_root) if is_image_file(x)]
-        train_list = image_list[:train_size]
-        assert len(train_list) > 0
-        train_set = ImageDatasetFromFile(train_list, data_root, input_height=None, crop_height=None,
-                                         output_height=output_height, is_mirror=True)
-    elif dataset == 'celeb256':
-        channels = [64, 128, 256, 512, 512, 512]
-        image_size = 256
-        ch = 3
-        output_height = 256
-        train_size = 162770
-        data_root = '../data/celeb256/img_align_celeba'
-        image_list = [x for x in os.listdir(data_root) if is_image_file(x)]
-        train_list = image_list[:train_size]
-        assert len(train_list) > 0
-        train_set = ImageDatasetFromFile(train_list, data_root, input_height=None, crop_height=None,
-                                         output_height=output_height, is_mirror=True)
-    elif dataset == 'celeb1024':
-        channels = [16, 32, 64, 128, 256, 512, 512, 512]
-        image_size = 1024
-        ch = 3
-        output_height = 1024
-        train_size = 29000
-        data_root = './' + dataset
-        image_list = [x for x in os.listdir(data_root) if is_image_file(x)]
-        train_list = image_list[:train_size]
-        assert len(train_list) > 0
 
-        train_set = ImageDatasetFromFile(train_list, data_root, input_height=None, crop_height=None,
-                                         output_height=output_height, is_mirror=True)
-    elif dataset == 'monsters128':
-        channels = [64, 128, 256, 512, 512]
-        image_size = 128
-        ch = 3
-        data_root = './monsters_ds/'
-        train_set = DigitalMonstersDataset(root_path=data_root, output_height=image_size)
-    elif dataset == 'svhn':
-        image_size = 32
-        channels = [64, 128, 256]
-        train_set = SVHN(root='./svhn', split='train', transform=transforms.ToTensor(), download=True)
-        ch = 3
-    elif dataset == 'fmnist':
-        image_size = 28
-        channels = [64, 128]
-        train_set = FashionMNIST(root='./fmnist_ds', train=True, download=True, transform=transforms.ToTensor())
-        ch = 1
-    elif dataset == 'mnist':
-        image_size = 28
-        channels = [64, 128]
-        train_set = MNIST(root='./mnist_ds', train=True, download=True, transform=transforms.ToTensor())
-        ch = 1
-    else:
-        raise NotImplementedError("dataset is not supported")
+    channels = [64, 128, 256, 512, 512, 512]
+    image_size = 256
+    ch = 3
+    output_height = 256
+    train_size = 162770
+    data_root = '/scratch/engn8536/Datasets/data256x256'
+    image_list = [x for x in os.listdir(data_root) if is_image_file(x)]
+    train_list = image_list[:train_size]
+    assert len(train_list) > 0
+    train_set = ImageDatasetFromFile(train_list, data_root, input_height=None, crop_height=None,
+                                     output_height=output_height, is_mirror=True)
+
 
     model = SoftIntroVAE(cdim=ch, zdim=z_dim, channels=channels, image_size=image_size).to(device)
     if pretrained is not None:
@@ -467,23 +414,6 @@ def train_soft_intro_vae(dataset='cifar10', z_dim=128, lr_e=2e-4, lr_d=2e-4, bat
     exp_elbos_r = []
     best_fid = None
     for epoch in range(start_epoch, num_epochs):
-        if with_fid and ((epoch == 0) or (epoch >= 100 and epoch % 20 == 0) or epoch == num_epochs - 1):
-            with torch.no_grad():
-                print("calculating fid...")
-                fid = calculate_fid_given_dataset(train_data_loader, model, batch_size, cuda=True, dims=2048,
-                                                  device=device, num_images=50000)
-                print("fid:", fid)
-                if best_fid is None:
-                    best_fid = fid
-                elif best_fid > fid:
-                    print("best fid updated: {} -> {}".format(best_fid, fid))
-                    best_fid = fid
-                    # save
-                    save_epoch = epoch
-                    prefix = dataset + "_soft_intro" + "_betas_" + str(beta_kl) + "_" + str(beta_neg) + "_" + str(
-                        beta_rec) + "_" + "fid_" + str(fid) + "_"
-                    save_checkpoint(model, save_epoch, cur_iter, prefix)
-
         diff_kls = []
         # save models
         if epoch % save_interval == 0 and epoch > 0:
@@ -505,8 +435,6 @@ def train_soft_intro_vae(dataset='cifar10', z_dim=128, lr_e=2e-4, lr_d=2e-4, bat
 
         for batch in pbar:
             # --------------train------------
-            if dataset in ["cifar10", "svhn", "fmnist", "mnist"]:
-                batch = batch[0]
             if epoch < num_vae:
                 if len(batch.size()) == 3:
                     batch = batch.unsqueeze(0)
@@ -723,6 +651,6 @@ if __name__ == '__main__':
                              num_vae=0, beta_kl=beta_kl, beta_neg=beta_neg, beta_rec=beta_rec,
                              device=device, save_interval=50, start_epoch=0, lr_e=2e-4, lr_d=2e-4,
                              pretrained=None,
-                             test_iter=1000, with_fid=False)
+                             test_iter=1000)
     except SystemError:
         print("Error, probably loss is NaN, try again...")
